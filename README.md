@@ -1,6 +1,15 @@
-# 📚 书签管理系统
+# 📚 Nav - Supabase Edition (现代化书签管理系统)
 
-基于 Cloudflare Pages + D1 + Vue 3 构建的现代化书签管理系统。
+## 📝 归属与许可证声明
+
+本项目是基于 [deerwan/nav](https://github.com/deerwan/nav) 项目进行二次开发和架构迁移的衍生作品。
+
+* **原始项目许可证**：Apache License 2.0。
+* **核心架构变更**：将原有的 Cloudflare Pages Functions + D1 架构完全替换为 **Supabase (PostgreSQL) + 纯前端** BaaS 架构，以适应国内和通用的 Docker 部署环境。
+
+我们保留了原项目的版权和许可证信息，并在此感谢原作者的贡献。
+
+基于 **Vue 3 + Supabase** 构建，部署在 **腾讯云 EdgeOne Pages** 上的现代化书签管理系统。
 
 ## ✨ 功能特性
 
@@ -8,61 +17,50 @@
 - 🔖 **书签管理**：添加、编辑、删除书签，支持私密标记
 - 🔍 **实时搜索**：按名称、URL 或描述快速搜索
 - 📥 **导入导出**：支持 JSON/HTML 格式，导入浏览器书签
-- 💾 **云端备份**：备份到 Cloudflare R2，支持恢复（可选）
+- 💾 **本地备份**：支持本地 JSON 导出与导入恢复（取代云存储）
 - ⚡ **批量操作**：批量移动、编辑、删除
-- 🤖 **AI 功能**：智能生成描述、分类推荐（支持 OpenAI 兼容 API）
+- 🤖 **AI 功能**：智能生成描述、分类推荐（支持 DeepSeek/OpenAI 兼容 API）
 - 🎨 **主题定制**：亮色/暗色主题、自定义壁纸、标题、页脚
 - 🌐 **浏览器扩展**：支持 Chrome、Edge、Brave、Firefox
 
 ## 🛠️ 技术栈
 
-Vue 3 + Vite + Cloudflare Pages Functions + D1 + R2
+**Vue 3 + Vite + Supabase (PostgreSQL & Auth) + Tencent Cloud EdgeOne Pages**
 
-## 🚀 快速部署
+## 🚀 快速部署 (EdgeOne Pages)
 
-### 1. 创建 D1 数据库
-在 [Cloudflare Dashboard](https://dash.cloudflare.com/) 中：
-- `Workers & Pages` > `D1` > `Create database`，名称：`bookmark-db`
-- 进入数据库 > `Console`，执行 `schema.sql`
+### 1. 准备 Supabase 数据库 (BaaS 后端)
 
-### 2. 部署 Pages 项目
-- Fork [本仓库](https://github.com/deerwan/nav) 到 GitHub
-- 在 Cloudflare Dashboard 创建 Pages 项目，连接 GitHub 仓库
-- 构建设置：构建命令 `npm run build`，输出目录 `dist`
+您的所有数据将安全地存储在 Supabase PostgreSQL 数据库中。
 
-### 3. 配置绑定和变量
+- **创建项目**：在 Supabase Dashboard 创建一个新项目，并获取您的 **Project URL** 和 **Anon Public Key**。
+- **创建表结构**：进入 Supabase **SQL Editor**，执行 `schema.sql` 文件的内容（已适配 PostgreSQL）。
+- **开启认证**：在 Supabase **Authentication** 中开启 Email/Password 登录，并创建您的管理员账号。
 
-**绑定 D1 数据库**：
-- Pages 项目 > `Settings` > `Functions` > `D1 database bindings`
-- 添加绑定：变量名 `DB`，选择 `bookmark-db`
+### 2. 部署 Pages 项目 (EdgeOne)
 
-**配置环境变量**（部署后配置）：
-- Pages 项目 > `Settings` > `Variables and Secrets`
-- 添加以下变量后，在 `Deployments` 页面重试部署
+- Fork [本仓库](https://github.com/yuzl1/nav) 到 GitHub (如果您还没有完成)。
+- 登录 **腾讯云 EdgeOne Pages 控制台**，创建 Pages 项目，连接您的 GitHub 仓库。
+
+### 3. 配置环境变量 (连接密钥)
+
+由于本项目是前端直连数据库，您需要通过 EdgeOne 环境变量安全地注入密钥。
+
+- Pages 项目 > **设置** -> **环境变量**。
+- 添加以下两个 **Vite 兼容** 的环境变量（**密钥绝不提交到 Git**）：
 
 | 变量名 | 说明 | 必需 |
-|--------|------|------|
-| `ADMIN_USERNAME` | 管理员用户名 | ✅ |
-| `ADMIN_PASSWORD` | 管理员密码 | ✅ |
-| `JWT_SECRET` | JWT 密钥（至少32位随机字符串） | ✅ |
-| `OPENAI_API_KEY` | OpenAI API Key（AI 功能） | ❌ |
-| `OPENAI_BASE_URL` | API 地址（默认：`https://api.openai.com/v1`） | ❌ |
-| `OPENAI_MODEL` | 模型名称（默认：`gpt-4o-mini`） | ❌ |
+| :--- | :--- | :--- |
+| `VITE_SUPABASE_URL` | Supabase 后台提供的 Project URL | ✅ |
+| `VITE_SUPABASE_ANON_KEY` | Supabase 后台提供的 Anon Public Key | ✅ |
+| `OPENAI_API_KEY` | DeepSeek/OpenAI API Key（AI 功能） | ❌ |
+| `OPENAI_BASE_URL` | API 基础地址（例如：`https://api.deepseek.com/v1`） | ❌ |
 
-**配置 R2 备份**（可选）：
-- `Workers & Pages` > `R2` > `Create bucket`，名称：`bookmark-backups`
-- Pages 项目 > `Settings` > `Functions` > `R2 bucket bindings`
-- 添加绑定：变量名 `BACKUP_BUCKET`，选择 `bookmark-backups`
-- 重试部署
+**构建设置**：
+* 构建命令：`npm run build`
+* 输出目录：`dist`
 
-> **提示**：所有配置通过 Dashboard 完成，无需修改代码。`wrangler.toml` 仅用于本地开发（已添加到 `.gitignore`）。
-
-**本地开发**：
-```bash
-cp wrangler.toml.example wrangler.toml
-# 编辑 wrangler.toml，替换 database_id
-npm run dev
-```
+---
 
 ## 🧩 浏览器扩展
 
@@ -75,12 +73,14 @@ npm run dev
 - Chrome/Edge/Brave: `bookmark-manager-chromium.zip`
 - Firefox: `bookmark-manager-firefox.zip`
 
-安装后配置服务器地址和管理员账号即可使用。
+安装后配置您的项目地址和管理员账号即可使用。
+
+---
 
 ## 📖 更多信息
 
 - 📺 [视频教程](https://www.bilibili.com/video/BV1zR2MB6EnW/)
-- 📦 [GitHub 仓库](https://github.com/deerwan/nav)
+- 📦 [GitHub 仓库](https://github.com/yuzl1/nav)
 
 ## 💰 请喝咖啡
 
@@ -109,4 +109,4 @@ npm run dev
 
 Apache License 2.0
 
-Made with ❤️ using Vue 3 and Cloudflare
+Made with ❤️ using Vue 3 and Supabase
