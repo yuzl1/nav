@@ -5,27 +5,27 @@
         <div class="dialog-box login-modal" @click.stop>
           <h3 class="dialog-title">登录</h3>
           <div class="form-group">
-            <label>用户名</label>
-            <input 
-              v-model="username" 
-              type="text" 
-              placeholder="请输入用户名"
-              @keyup.enter="handleLogin"
+            <label>邮箱</label>
+            <input
+                v-model="username"
+                type="email"
+                placeholder="请输入登录邮箱"
+                @keyup.enter="handleLogin"
             >
           </div>
           <div class="form-group">
             <label>密码</label>
-            <input 
-              v-model="password" 
-              type="password" 
-              placeholder="请输入密码"
-              @keyup.enter="handleLogin"
+            <input
+                v-model="password"
+                type="password"
+                placeholder="请输入密码"
+                @keyup.enter="handleLogin"
             >
           </div>
           <div class="form-group">
             <label class="remember-me-label">
               <input v-model="rememberMe" type="checkbox">
-              <span>记住我（一个月内免登录）</span>
+              <span>记住我</span>
             </label>
           </div>
           <p v-if="error" class="error-message">{{ error }}</p>
@@ -55,7 +55,7 @@ const open = () => {
   show.value = true
   username.value = ''
   password.value = ''
-  rememberMe.value = false
+  rememberMe.value = true
   error.value = ''
 }
 
@@ -65,12 +65,13 @@ const close = () => {
 
 const handleLogin = async () => {
   if (!username.value || !password.value) {
-    error.value = '请输入用户名和密码'
+    error.value = '请输入邮箱和密码'
     return
   }
-  
-  const result = await login(username.value, password.value, rememberMe.value)
-  
+
+  // 调用 useAuth 中的 login (已改为 Supabase 逻辑)
+  const result = await login(username.value, password.value)
+
   if (result.success) {
     close()
   } else {
@@ -112,4 +113,3 @@ defineExpose({
   color: var(--primary);
 }
 </style>
-

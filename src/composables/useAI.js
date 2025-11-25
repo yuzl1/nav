@@ -1,214 +1,90 @@
+// src/composables/useAI.js
 import { ref } from 'vue'
 import { useAuth } from './useAuth'
+import { supabase } from '../utils/supabase'
 
+// 这些状态从 settings 表加载
 const aiEnabled = ref(false)
-const aiSource = ref('none')
 const aiApiKey = ref('')
-const aiBaseUrl = ref('')
+const aiBaseUrl = ref('https://api.openai.com/v1')
+const aiModel = ref('gpt-4o-mini')
 
 export function useAI() {
-  const { apiRequest } = useAuth()
+    const { isAuthenticated } = useAuth()
 
-  const checkAIAvailability = async () => {
-    try {
-      const response = await apiRequest('/api/ai/status', {
-        method: 'GET'
-      })
-      
-      const result = await response.json()
-      if (result.success) {
-        aiEnabled.value = result.enabled
-        aiSource.value = result.source || 'none'
-        return { success: true, enabled: result.enabled, source: result.source }
-      }
-      return { success: false, enabled: false }
-    } catch (error) {
-      aiEnabled.value = false
-      aiSource.value = 'none'
-      return { success: false, enabled: false }
-    }
-  }
+    // 加载 AI 设置
+    const loadAISettings = async () => {
+        if (!isAuthenticated.value) return
+        const { data } = await supabase.from('settings').select('key, value')
+            .in('key', ['aiApiKey', 'aiBaseUrl', 'aiModel'])
 
-  const generateDescription = async (name, url) => {
-    try {
-      const response = await apiRequest('/api/ai/generate-description', {
-        method: 'POST',
-        body: JSON.stringify({ name, url })
-      })
-      
-      const result = await response.json()
-      if (result.success) {
-        return { success: true, description: result.description }
-      }
-      return { success: false, error: result.error || '生成失败' }
-    } catch (error) {
-      if (error.message === 'Token expired') {
-        return { success: false, error: '登录已过期，请重新登录' }
-      }
-      return { success: false, error: '网络错误' }
-    }
-  }
-
-  const suggestCategory = async (name, url, description, categories) => {
-    try {
-      const response = await apiRequest('/api/ai/suggest-category', {
-        method: 'POST',
-        body: JSON.stringify({ name, url, description, categories })
-      })
-      
-      const result = await response.json()
-      if (result.success) {
-        return { success: true, categoryId: result.categoryId, reason: result.reason }
-      }
-      return { success: false, error: result.error || '推荐失败' }
-    } catch (error) {
-      if (error.message === 'Token expired') {
-        return { success: false, error: '登录已过期，请重新登录' }
-      }
-      return { success: false, error: '网络错误' }
-    }
-  }
-
-  const batchGenerateDescriptions = async (bookmarks) => {
-    try {
-      const response = await apiRequest('/api/ai/batch-generate-descriptions', {
-        method: 'POST',
-        body: JSON.stringify({ bookmarks })
-      })
-      
-      const result = await response.json()
-      if (result.success) {
-        return { 
-          success: true, 
-          results: result.results,
-          successCount: result.successCount,
-          failedCount: result.failedCount
+        if (data) {
+            const map = {}
+            data.forEach(i => map[i.key] = i.value)
+            aiApiKey.value = map.aiApiKey || ''
+            aiBaseUrl.value = map.aiBaseUrl || 'https://api.openai.com/v1'
+            aiModel.value = map.aiModel || 'gpt-4o-mini'
+            aiEnabled.value = !!aiApiKey.value
         }
-      }
-      return { success: false, error: result.error || '批量生成失败' }
-    } catch (error) {
-      if (error.message === 'Token expired') {
-        return { success: false, error: '登录已过期，请重新登录' }
-      }
-      return { success: false, error: '网络错误' }
     }
-  }
 
-  const batchClassify = async (bookmarks, categories) => {
-    try {
-      const response = await apiRequest('/api/ai/batch-classify', {
-        method: 'POST',
-        body: JSON.stringify({ bookmarks, categories })
-      })
-      
-      const result = await response.json()
-      if (result.success) {
-        return { 
-          success: true, 
-          results: result.results,
-          successCount: result.successCount,
-          failedCount: result.failedCount
+    const saveAISettings = async (settings) => {
+        const updates = [
+            { key: 'aiApiKey', value: settings.apiKey },
+            { key: 'aiBaseUrl', value: settings.baseUrl },
+            { key: 'aiModel', value: settings.model }
+        ]
+        const { error } = await supabase.from('settings').upsert(updates, { onConflict: 'key' })
+        if (!error) await loadAISettings()
+        return { success: !error, error: error?.message }
+    }
+
+    // 通用 AI 调用函数 (直接在浏览器发起)
+    const callAI = async (messages) => {
+        if (!aiApiKey.value) return { success: false, error: '未配置 API Key' }
+
+        try {
+            const response = await fetch(`${aiBaseUrl.value}/chat/completions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${aiApiKey.value}`
+                },
+                body: JSON.stringify({
+                    model: aiModel.value,
+                    messages: messages,
+                    temperature: 0.7
+                })
+            })
+            const data = await response.json()
+            if (data.error) throw new Error(data.error.message)
+            return { success: true, content: data.choices[0].message.content }
+        } catch (e) {
+            return { success: false, error: e.message }
         }
-      }
-      return { success: false, error: result.error || '批量分类失败' }
-    } catch (error) {
-      if (error.message === 'Token expired') {
-        return { success: false, error: '登录已过期，请重新登录' }
-      }
-      return { success: false, error: '网络错误' }
     }
-  }
 
-  const saveAISettings = async (settings) => {
-    try {
-      const response = await apiRequest('/api/ai/settings', {
-        method: 'POST',
-        body: JSON.stringify(settings)
-      })
-      
-      const result = await response.json()
-      if (result.success) {
-        await checkAIAvailability()
-        return { success: true }
-      }
-      return { success: false, error: result.error || '保存失败' }
-    } catch (error) {
-      if (error.message === 'Token expired') {
-        return { success: false, error: '登录已过期，请重新登录' }
-      }
-      return { success: false, error: '网络错误' }
+    const generateDescription = async (name, url) => {
+        await loadAISettings()
+        const prompt = `请为以下网站生成一段简短的描述（50字以内）：\n网站名称：${name}\n网址：${url}`
+        const res = await callAI([{ role: 'user', content: prompt }])
+        if (res.success) return { success: true, description: res.content.trim() }
+        return res
     }
-  }
 
-  const getAISettings = async () => {
-    try {
-      const response = await apiRequest('/api/ai/settings', {
-        method: 'GET'
-      })
-      
-      const result = await response.json()
-      if (result.success) {
-        aiApiKey.value = result.apiKey || ''
-        aiBaseUrl.value = result.baseUrl || ''
-        if (result.source) {
-          aiSource.value = result.source
-        }
-        return { 
-          success: true, 
-          apiKey: result.apiKey || '',
-          baseUrl: result.baseUrl || 'https://api.openai.com/v1',
-          model: result.model || 'gpt-4o-mini',
-          authHeader: result.authHeader || 'Authorization',
-          authPrefix: result.authPrefix !== undefined ? result.authPrefix : 'Bearer ',
-          hasApiKey: !!result.hasApiKey,
-          lockedFields: result.lockedFields || {},
-          customPromptDescriptionEnabled: result.customPromptDescriptionEnabled || false,
-          customPromptDescription: result.customPromptDescription || ''
-        }
-      }
-      return { success: false, error: result.error || '获取失败' }
-    } catch (error) {
-      if (error.message === 'Token expired') {
-        return { success: false, error: '登录已过期，请重新登录' }
-      }
-      return { success: false, error: '网络错误' }
+    const suggestCategory = async (name, url, categories) => {
+        await loadAISettings()
+        const cats = JSON.stringify(categories)
+        const prompt = `给定分类列表：${cats}。\n请根据网站 "${name}" (${url})，推荐最合适的一个分类ID。只返回分类ID数字，不要其他内容。`
+        const res = await callAI([{ role: 'user', content: prompt }])
+        // 解析返回的 ID
+        if (res.success) return { success: true, categoryId: parseInt(res.content.match(/\d+/)[0]) }
+        return res
     }
-  }
 
-  const verifyApiKey = async (apiKey, baseUrl, model) => {
-    try {
-      const response = await apiRequest('/api/ai/verify', {
-        method: 'POST',
-        body: JSON.stringify({ apiKey, baseUrl, model })
-      })
-      
-      const result = await response.json()
-      return { 
-        success: result.success, 
-        valid: result.valid, 
-        message: result.message 
-      }
-    } catch (error) {
-      return { 
-        success: false, 
-        valid: false, 
-        message: error.message || '验证失败' 
-      }
+    return {
+        aiEnabled, aiApiKey, aiBaseUrl,
+        loadAISettings, saveAISettings,
+        generateDescription, suggestCategory
     }
-  }
-
-  return {
-    aiEnabled,
-    aiSource,
-    aiApiKey,
-    aiBaseUrl,
-    checkAIAvailability,
-    generateDescription,
-    suggestCategory,
-    batchGenerateDescriptions,
-    batchClassify,
-    saveAISettings,
-    getAISettings,
-    verifyApiKey
-  }
 }

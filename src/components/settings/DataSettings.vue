@@ -1,8 +1,7 @@
 <template>
   <div class="settings-section">
     <h2 class="section-title">数据管理</h2>
-    
-    <!-- 导入导出 -->
+
     <div class="form-group">
       <div class="form-header">
         <div class="form-title">导入/导出</div>
@@ -12,19 +11,7 @@
         导入/导出
       </button>
     </div>
-    
-    <!-- 云端备份 -->
-    <div class="form-group">
-      <div class="form-header">
-        <div class="form-title">云端备份</div>
-        <div class="form-description">将数据备份到 Cloudflare R2 存储，支持备份列表管理和恢复</div>
-      </div>
-      <button class="text-btn" @click="$emit('action', 'backup')">
-        备份管理
-      </button>
-    </div>
-    
-    <!-- 清理空分类 -->
+
     <div class="form-group">
       <div class="form-header">
         <div class="form-title">清理空分类</div>
@@ -37,16 +24,15 @@
           </span>
         </div>
       </div>
-      <button 
-        class="text-btn" 
-        @click="$emit('action', 'cleanupEmptyCategories')"
-        :disabled="emptyCategoryCount === 0"
+      <button
+          class="text-btn"
+          @click="$emit('action', 'cleanupEmptyCategories')"
+          :disabled="emptyCategoryCount === 0"
       >
         {{ emptyCategoryCount > 0 ? '清理空分类' : '无空分类' }}
       </button>
     </div>
-    
-    <!-- 统计信息 -->
+
     <div class="form-group">
       <div class="form-header">
         <div class="form-title">书签统计</div>

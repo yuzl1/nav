@@ -1,96 +1,89 @@
 <template>
   <div class="app" :class="{ 'efficient-mode': displayMode === 'efficient' }">
-    <!-- Header -->
     <header class="app-header" :class="{ 'efficient-mode': displayMode === 'efficient' }">
       <div class="header-content">
-         <!-- 左上角：汉堡菜单按钮 -->
-         <div class="header-left">
-           <button
-             v-if="categories.length > 0"
-             class="sidebar-toggle-btn"
-             @click="sidebarOpen = !sidebarOpen"
-             title="切换分类侧边栏"
-           >
-             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-               <path d="M3 12h18M3 6h18M3 18h18"/>
-             </svg>
-           </button>
-         </div>
+        <div class="header-left">
+          <button
+              v-if="categories.length > 0"
+              class="sidebar-toggle-btn"
+              @click="sidebarOpen = !sidebarOpen"
+              title="切换分类侧边栏"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path d="M3 12h18M3 6h18M3 18h18"/>
+            </svg>
+          </button>
+        </div>
 
-         <!-- 右上角：操作按钮 -->
-         <div class="header-right">
-          
-          <!-- 未登录状态：显示登录按钮 -->
-          <button 
-            v-if="!isAuthenticated"
-            class="btn btn-primary"
-            @click="loginModal.open()"
+        <div class="header-right">
+
+          <button
+              v-if="!isAuthenticated"
+              class="btn btn-primary"
+              @click="loginModal.open()"
           >
             登录
           </button>
-          
-          <!-- 已登录状态：直接显示操作按钮，不需要汉堡菜单 -->
+
           <template v-else>
-            <button 
-              class="header-text-btn"
-              @click="settingsPage.open()"
+            <button
+                class="header-text-btn"
+                @click="settingsPage.open()"
             >
               设置
             </button>
-            
-            <!-- 仅在非编辑模式下显示"编辑"按钮；编辑模式使用外显"完成"按钮 -->
-            <button 
-              v-if="!isEditMode"
-              class="header-text-btn"
-              @click="isEditMode = true"
+
+            <button
+                v-if="!isEditMode"
+                class="header-text-btn"
+                @click="isEditMode = true"
             >
               编辑
             </button>
-            
-            <button 
-              class="header-text-btn"
-              @click="handleLogout()"
+
+            <button
+                class="header-text-btn"
+                @click="handleLogout()"
             >
               退出
             </button>
           </template>
         </div>
       </div>
-      
+
       <div v-if="showSearch" class="header-search">
         <SearchBar @scrollToBookmark="handleScrollToBookmark" />
       </div>
-      
-      <!-- Edit Mode Toolbar -->
-      <EditModeToolbar 
-        :is-edit-mode="isEditMode"
-        :is-batch-mode="isBatchMode"
-        :selected-count="selectedCount"
-        :selected-category-count="selectedCategoryCount"
-        :has-bookmarks="bookmarks.length > 0"
-        :ai-enabled="aiEnabled"
-        @addBookmark="handleAddBookmark"
-        @addCategory="handleAddCategory"
-        @toggleBatchMode="handleToggleBatchMode"
-        @selectAll="handleSelectAll"
-        @deselectAll="handleDeselectAll"
-        @invertSelection="handleInvertSelection"
-        @batchMove="handleBatchMove"
-        @batchEdit="handleBatchEdit"
-        @batchAIGenerate="handleBatchAIGenerate"
-        @batchAIClassify="handleBatchAIClassify"
-        @batchDelete="handleBatchDelete"
-        @batchDeleteCategories="handleBatchDeleteCategories"
-        @finishEdit="() => { isEditMode = false }"
+
+      <EditModeToolbar
+          :is-edit-mode="isEditMode"
+          :is-batch-mode="isBatchMode"
+          :selected-count="selectedCount"
+          :selected-category-count="selectedCategoryCount"
+          :has-bookmarks="bookmarks.length > 0"
+          :ai-enabled="aiEnabled"
+          @addBookmark="handleAddBookmark"
+          @addCategory="handleAddCategory"
+          @toggleBatchMode="handleToggleBatchMode"
+          @selectAll="handleSelectAll"
+          @deselectAll="handleDeselectAll"
+          @invertSelection="handleInvertSelection"
+          @batchMove="handleBatchMove"
+          @batchEdit="handleBatchEdit"
+          @batchAIGenerate="handleBatchAIGenerate"
+          @batchAIClassify="handleBatchAIClassify"
+          @batchDelete="handleBatchDelete"
+          @batchDeleteCategories="handleBatchDeleteCategories"
+          @finishEdit="() => { isEditMode = false }"
       />
     </header>
-    
+
     <main class="page-main">
       <div v-if="loading" class="loading">
         <div class="spinner"></div>
         <p>加载中...</p>
       </div>
-      
+
       <div v-else-if="!publicMode && !isAuthenticated" class="empty-state">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
@@ -103,7 +96,7 @@
           立即登录
         </button>
       </div>
-      
+
       <div v-else-if="categories.length === 0" class="empty-state">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
           <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
@@ -118,11 +111,11 @@
         <p v-else style="font-size: 0.9rem; margin-top: 0.5rem;">
           请先登录以管理书签
         </p>
-        <button 
-          v-if="isAuthenticated" 
-          class="btn btn-primary" 
-          @click="settingsPage.open(); setActiveSettingsTab('data')" 
-          style="margin-top: 1.5rem;"
+        <button
+            v-if="isAuthenticated"
+            class="btn btn-primary"
+            @click="settingsPage.open(); setActiveSettingsTab('data')"
+            style="margin-top: 1.5rem;"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width: 18px; height: 18px;">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -132,48 +125,44 @@
           快速导入书签
         </button>
       </div>
-      
+
       <div v-else class="main-layout" :class="{ 'efficient-mode': displayMode === 'efficient' }">
-        <!-- Sidebar Backdrop -->
-        <div 
-          v-if="sidebarOpen" 
-          class="sidebar-backdrop" 
-          @click="sidebarOpen = false"
+        <div
+            v-if="sidebarOpen"
+            class="sidebar-backdrop"
+            @click="sidebarOpen = false"
         ></div>
-        
-        <!-- Category Sidebar -->
-         <CategorySidebar
-           :categories="categories"
-           :bookmarkCountByCategory="bookmarkCountByCategory"
-           :totalBookmarkCount="totalBookmarkCount"
-           :selectedCategoryId="selectedCategoryId"
-           :selectedCategoryIds="selectedCategoryIds"
-           :is-open="sidebarOpen"
-           :is-desktop="isDesktop"
-           :is-edit-mode="isEditMode"
-           :is-batch-mode="isBatchMode"
-           :custom-title="customTitle"
-           @toggle="sidebarOpen = !sidebarOpen"
-           @select="handleSelectCategory"
-           @toggle-category-selection="handleToggleCategorySelection"
-           @add-subcategory="handleAddSubcategory"
-           @add-bookmark="handleAddBookmarkToCategory"
-           @edit-category="handleEditCategory"
-           @delete-category="handleDeleteCategory"
-           @reorder-category="handleReorderCategory"
-         />
-        
-        <!-- Bookmarks Content -->
+
+        <CategorySidebar
+            :categories="categories"
+            :bookmarkCountByCategory="bookmarkCountByCategory"
+            :totalBookmarkCount="totalBookmarkCount"
+            :selectedCategoryId="selectedCategoryId"
+            :selectedCategoryIds="selectedCategoryIds"
+            :is-open="sidebarOpen"
+            :is-desktop="isDesktop"
+            :is-edit-mode="isEditMode"
+            :is-batch-mode="isBatchMode"
+            :custom-title="customTitle"
+            @toggle="sidebarOpen = !sidebarOpen"
+            @select="handleSelectCategory"
+            @toggle-category-selection="handleToggleCategorySelection"
+            @add-subcategory="handleAddSubcategory"
+            @add-bookmark="handleAddBookmarkToCategory"
+            @edit-category="handleEditCategory"
+            @delete-category="handleDeleteCategory"
+            @reorder-category="handleReorderCategory"
+        />
+
         <div class="bookmarks-area" :class="{ 'efficient-mode': displayMode === 'efficient' }">
-          <!-- Breadcrumbs -->
-          <div 
-            v-if="selectedCategoryId !== ALL_CATEGORIES_ID && !searchQuery" 
-            class="breadcrumbs-container"
-            :class="{ 'efficient-mode': displayMode === 'efficient' }"
+          <div
+              v-if="selectedCategoryId !== ALL_CATEGORIES_ID && !searchQuery"
+              class="breadcrumbs-container"
+              :class="{ 'efficient-mode': displayMode === 'efficient' }"
           >
-            <button 
-              class="breadcrumb-item root-item"
-              @click="handleSelectCategory(ALL_CATEGORIES_ID)"
+            <button
+                class="breadcrumb-item root-item"
+                @click="handleSelectCategory(ALL_CATEGORIES_ID)"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" class="home-icon">
                 <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
@@ -181,17 +170,17 @@
               </svg>
               首页
             </button>
-            
+
             <template v-for="(item, index) in currentCategoryPath" :key="item.id">
               <span class="breadcrumb-separator">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                   <polyline points="9 18 15 12 9 6"/>
                 </svg>
               </span>
-              <button 
-                class="breadcrumb-item"
-                :class="{ active: index === currentCategoryPath.length - 1 }"
-                @click="handleSelectCategory(item.id)"
+              <button
+                  class="breadcrumb-item"
+                  :class="{ active: index === currentCategoryPath.length - 1 }"
+                  @click="handleSelectCategory(item.id)"
               >
                 {{ item.name }}
               </button>
@@ -200,23 +189,23 @@
 
           <template v-if="displayedCategories.length > 0">
             <CategorySection
-              v-for="category in displayedCategories"
-              :key="category.id"
-              :category="category"
-              :bookmarks="bookmarksByCategory[category.id] || []"
-              :is-edit-mode="isEditMode"
-              :is-batch-mode="isBatchMode"
-              :selected-ids="selectedIds"
-              :selected-category-ids="selectedCategoryIds"
-              :display-mode="displayMode"
-              @select-category="handleSelectCategory"
-              @edit-category="handleEditCategory"
-              @delete-category="handleDeleteCategory"
-              @edit-bookmark="handleEditBookmark"
-              @delete-bookmark="handleDeleteBookmark"
-              @reorder-bookmarks="handleReorderBookmarks"
-              @toggle-selection="handleToggleSelection"
-              @toggle-category-selection="handleToggleCategorySelection"
+                v-for="category in displayedCategories"
+                :key="category.id"
+                :category="category"
+                :bookmarks="bookmarksByCategory[category.id] || []"
+                :is-edit-mode="isEditMode"
+                :is-batch-mode="isBatchMode"
+                :selected-ids="selectedIds"
+                :selected-category-ids="selectedCategoryIds"
+                :display-mode="displayMode"
+                @select-category="handleSelectCategory"
+                @edit-category="handleEditCategory"
+                @delete-category="handleDeleteCategory"
+                @edit-bookmark="handleEditBookmark"
+                @delete-bookmark="handleDeleteBookmark"
+                @reorder-bookmarks="handleReorderBookmarks"
+                @toggle-selection="handleToggleSelection"
+                @toggle-category-selection="handleToggleCategorySelection"
             />
           </template>
           <div v-else class="empty-state">
@@ -237,16 +226,13 @@
         </div>
       </div>
     </main>
-    
-    <!-- Footer -->
+
     <footer class="app-footer">
       <div class="footer-content" v-html="footerContent"></div>
     </footer>
-    
-    <!-- Floating Buttons -->
+
     <FloatingButtons />
-    
-    <!-- Modals -->
+
     <LoginModal ref="loginModal" />
     <BookmarkDialog ref="bookmarkDialog" />
     <CategoryDialog ref="categoryDialog" />
@@ -258,44 +244,41 @@
     <BatchAIGenerateDialog ref="batchAIGenerateDialog" />
     <BatchAIClassifyDialog ref="batchAIClassifyDialog" />
     <BackupDialog ref="backupDialog" />
-    
-    <!-- Settings Page -->
-    <SettingsPage 
-      ref="settingsPage"
-      :theme-mode="themeMode"
-      :theme-style="themeStyle"
-      :is-dark="isDark"
-      :bookmarks="bookmarks"
-      :show-search="showSearch"
-      :random-wallpaper="randomWallpaper"
-      :wallpaper-api="wallpaperApi"
-      :display-mode="displayMode"
-      :hide-empty-categories="hideEmptyCategories"
-      :public-mode="publicMode"
-      :custom-title="customTitle"
-      :footer-content="footerContent"
-      :active-settings-tab="activeSettingsTab"
-      :empty-category-count="emptyCategoryCount"
-      @action="handleSettingsAction"
-      @set-theme-mode="setThemeMode"
-      @set-theme-style="setThemeStyle"
-      @toggle-search="toggleSearch"
-      @toggle-hide-empty="toggleHideEmptyCategories"
-      @toggle-public-mode="togglePublicMode"
-      @toggle-random-wallpaper="toggleRandomWallpaper"
-      @update-wallpaper-api="updateWallpaperApi"
-      @set-display-mode="setDisplayMode"
-      @update-title="updateCustomTitle"
-      @update-footer="updateFooterContent"
-      @editTitle="handleEditTitle"
-      @editFooter="handleEditFooter"
-      @setActiveTab="handleSettingsTabChange"
+
+    <SettingsPage
+        ref="settingsPage"
+        :theme-mode="themeMode"
+        :theme-style="themeStyle"
+        :is-dark="isDark"
+        :bookmarks="bookmarks"
+        :show-search="showSearch"
+        :random-wallpaper="randomWallpaper"
+        :wallpaper-api="wallpaperApi"
+        :display-mode="displayMode"
+        :hide-empty-categories="hideEmptyCategories"
+        :public-mode="publicMode"
+        :custom-title="customTitle"
+        :footer-content="footerContent"
+        :active-settings-tab="activeSettingsTab"
+        :empty-category-count="emptyCategoryCount"
+        @action="handleSettingsAction"
+        @set-theme-mode="setThemeMode"
+        @set-theme-style="setThemeStyle"
+        @toggle-search="toggleSearch"
+        @toggle-hide-empty="toggleHideEmptyCategories"
+        @toggle-public-mode="togglePublicMode"
+        @toggle-random-wallpaper="toggleRandomWallpaper"
+        @update-wallpaper-api="updateWallpaperApi"
+        @set-display-mode="setDisplayMode"
+        @update-title="updateCustomTitle"
+        @update-footer="updateFooterContent"
+        @editTitle="handleEditTitle"
+        @editFooter="handleEditFooter"
+        @setActiveTab="handleSettingsTabChange"
     />
-    
-    <!-- Update Notification -->
+
     <UpdateNotification />
-    
-    <!-- Toast Notifications -->
+
     <ToastNotification ref="toast" />
   </div>
 </template>
@@ -330,9 +313,9 @@ import BackupDialog from './components/BackupDialog.vue'
 import UpdateNotification from './components/UpdateNotification.vue'
 import ToastNotification from './components/ToastNotification.vue'
 import { useAI } from './composables/useAI'
-
-const { isAuthenticated, logout, onAuthChange } = useAuth()
-const { aiEnabled, checkAIAvailability } = useAI()
+// 修正 1: 移除 onAuthChange, 确保引入 loadAISettings
+const { isAuthenticated, logout } = useAuth()
+const { aiEnabled, loadAISettings } = useAI() // 修正 2: 替换 checkAIAvailability
 const { loadSettingsFromDB: loadSearchEnginesSettings } = useSearchEngines()
 const {
   categories,
@@ -405,20 +388,20 @@ const selectedCategoryIds = computed(() => getSelectedCategoryIds())
 const getBookmarkCountWithDescendants = (categoryId, categoryMap) => {
   let count = bookmarksByCategory.value[categoryId]?.length || 0
   const category = categoryMap[categoryId]
-  
+
   if (category && category.children && category.children.length > 0) {
     category.children.forEach(child => {
       count += getBookmarkCountWithDescendants(child.id, categoryMap)
     })
   }
-  
+
   return count
 }
 
 const bookmarkCountByCategory = computed(() => {
   const counts = {}
   const { map: categoryMap } = buildCategoryTree(categories.value)
-  
+
   categories.value.forEach(category => {
     counts[category.id] = getBookmarkCountWithDescendants(category.id, categoryMap)
   })
@@ -515,7 +498,7 @@ function updateActiveCategoryFromScroll() {
   if (typeof window === 'undefined') return
   if (isScrollingProgrammatically.value) return
   if (!categories.value.length) return
-  
+
   // 如果不是在"全部"视图，不进行滚动监听更新
   if (selectedCategoryId.value !== ALL_CATEGORIES_ID) return
 
@@ -543,7 +526,7 @@ function updateActiveCategoryFromScroll() {
       break
     }
   }
-  
+
   // 注意：在文件夹模式下，我们不希望滚动自动改变 selectedCategoryId，
   // 因为这会触发视图切换（从"全部"变成"单分类"）。
   // 所以这里我们可能需要一个新的状态来表示"当前视口中的分类"，而不是直接修改 selectedCategoryId。
@@ -559,22 +542,22 @@ const handleSelectCategory = (categoryId) => {
 
 const handleScrollToBookmark = (bookmark) => {
   if (typeof window === 'undefined') return
-  
+
   // 先滚动到分类
   scrollToCategory(bookmark.category_id)
-  
+
   // 等待滚动完成后，再滚动到具体的书签
   setTimeout(() => {
     const bookmarkElement = document.getElementById(`bookmark-${bookmark.id}`)
     if (!bookmarkElement) return
-    
+
     const offset = getScrollOffset()
     const elementTop = bookmarkElement.getBoundingClientRect().top + window.pageYOffset
     const targetTop = elementTop - offset - 20 // 额外留 20px 的间距
-    
+
     setProgrammaticScroll()
     window.scrollTo({ top: targetTop, behavior: 'smooth' })
-    
+
     // 高亮显示书签（添加一个临时的高亮效果）
     bookmarkElement.classList.add('highlight-bookmark')
     setTimeout(() => {
@@ -621,46 +604,55 @@ onMounted(async () => {
   await loadSettingsFromDB()
   await loadThemeFromDB()
   await loadSearchEnginesSettings()
-  
+
   // 检查AI可用性
-  await checkAIAvailability()
-  
+  await loadAISettings() // 修正 2: 替换 checkAIAvailability
+
   // 如果壁纸已启用，应用壁纸
   if (randomWallpaper.value) {
     applyWallpaper()
   }
-  
+
   loading.value = false
-  
+
   // 初始化 Toast
   if (toast.value) {
     setToastInstance(toast.value)
   }
-  
+
   // 如果已登录，检查空分类数量
   if (isAuthenticated.value) {
     checkEmptyCategories()
   }
-  
-  // 监听登录状态变化，重新获取数据
-  onAuthChange(async () => {
+
+  // 修正 1: 使用 watch 监听认证状态变化
+  watch(isAuthenticated, async (isLoggedIn, wasLoggedIn) => {
+    // 仅在新旧值不同时执行
+    if (isLoggedIn === wasLoggedIn) return;
+
+    // 重新获取数据和设置
     await fetchData()
-    // 登录后重新加载设置（确保获取最新数据）
     await loadSettingsFromDB()
     await loadThemeFromDB()
     await loadSearchEnginesSettings()
-    // 登录后检查空分类
-    if (isAuthenticated.value) {
+
+    if (isLoggedIn) {
+      // 登录成功时执行
       checkEmptyCategories()
     }
-  })
-  
+
+    // 移动端优化：登录/退出时关闭侧边栏
+    if (!isDesktop.value) {
+      sidebarOpen.value = false;
+    }
+  });
+
   // 监听自定义标题变化，更新页面标题
   watch(customTitle, (newTitle) => {
     document.title = newTitle
   }, { immediate: true })
-  
-  
+
+
   // 监听窗口滚动，更新活动分类
   let scrollTimeout = null
   const handleScroll = () => {
@@ -670,11 +662,11 @@ onMounted(async () => {
     }, 100)
   }
   window.addEventListener('scroll', handleScroll, { passive: true })
-  
+
   // 监听窗口大小变化
   window.addEventListener('resize', handleResize)
   handleResize()
-  
+
   // 清理事件监听
   onUnmounted(() => {
     window.removeEventListener('scroll', handleScroll)
@@ -682,12 +674,12 @@ onMounted(async () => {
     if (scrollResetTimer) clearTimeout(scrollResetTimer)
     if (scrollTimeout) clearTimeout(scrollTimeout)
   })
-  
+
   // 初始化时调用一次滚动检测
   nextTick(() => {
     updateActiveCategoryFromScroll()
   })
-  
+
   // 初始化布局偏移量
   nextTick(() => {
     updateLayoutOffsets()
@@ -753,21 +745,21 @@ const handleCleanupEmptyCategories = async () => {
     toastError(result.error || '获取空分类失败')
     return
   }
-  
+
   if (result.count === 0) {
     toastError('当前没有空分类需要清理')
     return
   }
-  
+
   // 构建确认消息
   const categoryNames = result.emptyCategories.map(cat => `"${cat.name}"`).join('、')
   const message = result.count === 1
-    ? `确定要删除空分类 ${categoryNames} 吗？`
-    : `确定要删除以下 ${result.count} 个空分类吗？\n\n${categoryNames}\n\n此操作不可恢复！`
-  
+      ? `确定要删除空分类 ${categoryNames} 吗？`
+      : `确定要删除以下 ${result.count} 个空分类吗？\n\n${categoryNames}\n\n此操作不可恢复！`
+
   const confirmed = await confirmDialog.value.open(message, '清理空分类')
   if (!confirmed) return
-  
+
   // 执行清理
   const cleanupResult = await cleanupEmptyCategories()
   if (cleanupResult.success) {
@@ -853,8 +845,8 @@ const handleEditCategory = async (category) => {
 const handleDeleteCategory = async (category) => {
   const displayName = getCategoryDisplayName(category)
   const confirmed = await confirmDialog.value.open(
-    `确定要删除分类"${displayName}"吗？该分类下的所有书签也将被删除。`,
-    '删除分类'
+      `确定要删除分类"${displayName}"吗？该分类下的所有书签也将被删除。`,
+      '删除分类'
   )
   if (confirmed) {
     const result = await deleteCategory(category.id)
@@ -872,8 +864,8 @@ const handleEditBookmark = (bookmark) => {
 
 const handleDeleteBookmark = async (bookmark) => {
   const confirmed = await confirmDialog.value.open(
-    `确定要删除书签"${bookmark.name}"吗？`,
-    '删除书签'
+      `确定要删除书签"${bookmark.name}"吗？`,
+      '删除书签'
   )
   if (confirmed) {
     const result = await deleteBookmark(bookmark.id)
@@ -1002,20 +994,20 @@ const handleBatchAIGenerate = async () => {
     toastError('请先选择需要生成描述的书签')
     return
   }
-  
+
   if (!aiEnabled.value) {
     toastError('AI 功能未启用，请先在设置中配置 AI')
     return
   }
-  
+
   const ids = getSelectedIds()
   const selectedBookmarksList = bookmarks.value.filter(b => ids.includes(b.id))
-  
+
   if (selectedBookmarksList.length === 0) {
     toastError('未找到选中的书签')
     return
   }
-  
+
   batchAIGenerateDialog.value?.open(selectedBookmarksList)
 }
 
@@ -1024,25 +1016,25 @@ const handleBatchAIClassify = async () => {
     toastError('请先选择需要分类的书签')
     return
   }
-  
+
   if (!aiEnabled.value) {
     toastError('AI 功能未启用，请先在设置中配置 AI')
     return
   }
-  
+
   if (categories.value.length === 0) {
     toastError('请先创建分类')
     return
   }
-  
+
   const ids = getSelectedIds()
   const selectedBookmarksList = bookmarks.value.filter(b => ids.includes(b.id))
-  
+
   if (selectedBookmarksList.length === 0) {
     toastError('未找到选中的书签')
     return
   }
-  
+
   batchAIClassifyDialog.value?.open(selectedBookmarksList)
 }
 
@@ -1114,8 +1106,8 @@ const handleReorderCategory = async ({ id, direction }) => {
   if (!category) return
   const parentId = category.parent_id ?? null
   const siblings = categories.value
-    .filter(c => (c.parent_id ?? null) === parentId)
-    .sort((a, b) => a.position - b.position)
+      .filter(c => (c.parent_id ?? null) === parentId)
+      .sort((a, b) => a.position - b.position)
 
   const index = siblings.findIndex(c => c.id === id)
   if (index === -1) return
