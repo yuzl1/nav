@@ -47,6 +47,14 @@
             >
               退出
             </button>
+
+            <div class="user-profile" v-if="user" title="当前登录用户">
+              <div class="avatar-circle">
+                {{ user.email ? user.email[0].toUpperCase() : 'U' }}
+              </div>
+              <span class="user-email">{{ user.email }}</span>
+            </div>
+
           </template>
         </div>
       </div>
@@ -314,12 +322,9 @@ import UpdateNotification from './components/UpdateNotification.vue'
 import ToastNotification from './components/ToastNotification.vue'
 import { useAI } from './composables/useAI'
 
-// ✅ 这里的解构将能正常工作，因为我们已经在 useAuth.js 兼容版中加回了 onAuthChange
-const { isAuthenticated, logout, onAuthChange } = useAuth()
-
-// ✅ 这里的解构也能正常工作，因为我们已经在 useAI.js 兼容版中加回了 checkAIAvailability
-const { aiEnabled, checkAIAvailability } = useAI()
-
+// 1. 引入 user 对象
+const { isAuthenticated, logout, onAuthChange, user } = useAuth()
+const { aiEnabled, loadAISettings } = useAI()
 const { loadSettingsFromDB: loadSearchEnginesSettings } = useSearchEngines()
 const {
   categories,
@@ -496,26 +501,21 @@ const scrollToCategory = (categoryId) => {
   window.scrollTo({ top: targetTop, behavior: 'smooth' })
 }
 
-// 文件夹模式下，滚动监听的逻辑需要调整（或者暂时禁用自动选中，因为现在是点击驱动的）
-// 但为了保持兼容性，我们只在"全部"视图下启用滚动监听
 function updateActiveCategoryFromScroll() {
   if (typeof window === 'undefined') return
   if (isScrollingProgrammatically.value) return
   if (!categories.value.length) return
 
-  // 如果不是在"全部"视图，不进行滚动监听更新
   if (selectedCategoryId.value !== ALL_CATEGORIES_ID) return
 
   const scrollY = window.scrollY || document.documentElement.scrollTop || 0
   if (scrollY <= 80) {
-    // 在顶部时保持"all"
     return
   }
 
   const offset = getScrollOffset()
   let activeId = null
 
-  // 只检测当前展示的分类（根分类）
   for (const category of displayedCategories.value) {
     const element = document.getElementById(`category-${category.id}`)
     if (!element) continue
@@ -530,12 +530,6 @@ function updateActiveCategoryFromScroll() {
       break
     }
   }
-
-  // 注意：在文件夹模式下，我们不希望滚动自动改变 selectedCategoryId，
-  // 因为这会触发视图切换（从"全部"变成"单分类"）。
-  // 所以这里我们可能需要一个新的状态来表示"当前视口中的分类"，而不是直接修改 selectedCategoryId。
-  // 或者，我们完全禁用滚动更新 selectedCategoryId 的逻辑，只保留点击导航。
-  // 鉴于文件夹模式的特性，禁用滚动自动选中是更合理的。
 }
 
 const handleSelectCategory = (categoryId) => {
@@ -610,8 +604,7 @@ onMounted(async () => {
   await loadSearchEnginesSettings()
 
   // 检查AI可用性
-  // ✅ 这里恢复调用 checkAIAvailability，因为它在 useAI.js 兼容版中已经恢复了
-  await checkAIAvailability()
+  await loadAISettings()
 
   // 如果壁纸已启用，应用壁纸
   if (randomWallpaper.value) {
@@ -630,27 +623,29 @@ onMounted(async () => {
     checkEmptyCategories()
   }
 
-  // 监听登录状态变化，重新获取数据
-  // ✅ 这里恢复调用 onAuthChange，因为它在 useAuth.js 兼容版中已经恢复了
-  onAuthChange(async () => {
+  // 监听登录状态变化
+  watch(isAuthenticated, async (isLoggedIn, wasLoggedIn) => {
+    if (isLoggedIn === wasLoggedIn) return;
+
     await fetchData()
-    // 登录后重新加载设置（确保获取最新数据）
     await loadSettingsFromDB()
     await loadThemeFromDB()
     await loadSearchEnginesSettings()
-    // 登录后检查空分类
-    if (isAuthenticated.value) {
+
+    if (isLoggedIn) {
       checkEmptyCategories()
     }
-  })
 
-  // 监听自定义标题变化，更新页面标题
+    if (!isDesktop.value) {
+      sidebarOpen.value = false;
+    }
+  });
+
   watch(customTitle, (newTitle) => {
     document.title = newTitle
   }, { immediate: true })
 
 
-  // 监听窗口滚动，更新活动分类
   let scrollTimeout = null
   const handleScroll = () => {
     if (scrollTimeout) clearTimeout(scrollTimeout)
@@ -660,11 +655,9 @@ onMounted(async () => {
   }
   window.addEventListener('scroll', handleScroll, { passive: true })
 
-  // 监听窗口大小变化
   window.addEventListener('resize', handleResize)
   handleResize()
 
-  // 清理事件监听
   onUnmounted(() => {
     window.removeEventListener('scroll', handleScroll)
     window.removeEventListener('resize', handleResize)
@@ -672,12 +665,10 @@ onMounted(async () => {
     if (scrollTimeout) clearTimeout(scrollTimeout)
   })
 
-  // 初始化时调用一次滚动检测
   nextTick(() => {
     updateActiveCategoryFromScroll()
   })
 
-  // 初始化布局偏移量
   nextTick(() => {
     updateLayoutOffsets()
   })
@@ -695,26 +686,21 @@ const handleLogout = async () => {
 const handleSettingsAction = (action) => {
   switch (action) {
     case 'importExport':
-      // 导入导出保持在设置页面内，不关闭设置页面
       importExportDialog.value.open()
       break
     case 'backup':
-      // 备份管理保持在设置页面内，不关闭设置页面
       backupDialog.value.open()
       break
     case 'cleanupEmptyCategories':
-      // 清理空分类保持在设置页面内
       handleCleanupEmptyCategories()
       break
     case 'addBookmark':
-      // 其他操作需要关闭设置页面
       settingsPage.value.close()
       setTimeout(() => {
         bookmarkDialog.value.open()
       }, 300)
       break
     case 'addCategory':
-      // 其他操作需要关闭设置页面
       settingsPage.value.close()
       setTimeout(() => {
         handleAddCategory()
@@ -730,13 +716,11 @@ const checkEmptyCategories = async () => {
       emptyCategoryCount.value = result.count || 0
     }
   } catch (error) {
-    // 静默失败，不影响用户体验
     console.error('Failed to check empty categories:', error)
   }
 }
 
 const handleCleanupEmptyCategories = async () => {
-  // 先检查空分类数量
   const result = await getEmptyCategories()
   if (!result.success) {
     toastError(result.error || '获取空分类失败')
@@ -748,7 +732,6 @@ const handleCleanupEmptyCategories = async () => {
     return
   }
 
-  // 构建确认消息
   const categoryNames = result.emptyCategories.map(cat => `"${cat.name}"`).join('、')
   const message = result.count === 1
       ? `确定要删除空分类 ${categoryNames} 吗？`
@@ -757,14 +740,12 @@ const handleCleanupEmptyCategories = async () => {
   const confirmed = await confirmDialog.value.open(message, '清理空分类')
   if (!confirmed) return
 
-  // 执行清理
   const cleanupResult = await cleanupEmptyCategories()
   if (cleanupResult.success) {
     if (cleanupResult.deletedCount === 0) {
       toastError('没有空分类需要清理')
     } else {
       toastSuccess(`已成功清理 ${cleanupResult.deletedCount} 个空分类`)
-      // 更新空分类数量
       emptyCategoryCount.value = 0
     }
   } else {
@@ -772,11 +753,9 @@ const handleCleanupEmptyCategories = async () => {
   }
 }
 
-// 监听数据变化，更新空分类数量（使用防抖）
 let checkEmptyCategoriesTimer = null
 watch([categories, bookmarks], async () => {
   if (isAuthenticated.value) {
-    // 防抖：延迟 500ms 执行，避免频繁检查
     if (checkEmptyCategoriesTimer) {
       clearTimeout(checkEmptyCategoriesTimer)
     }
@@ -804,9 +783,7 @@ const handleAddBookmarkToCategory = (categoryId) => {
   bookmarkDialog.value.open(null, { categoryId })
 }
 
-// Get current context category ID (for adding bookmarks with proper default)
 const getCurrentContextCategoryId = () => {
-  // If a specific category is selected (not "all"), attempt to use it
   if (selectedCategoryId.value !== ALL_CATEGORIES_ID && selectedCategoryId.value !== null && selectedCategoryId.value !== undefined) {
     if (typeof selectedCategoryId.value === 'number') {
       return selectedCategoryId.value
@@ -816,11 +793,9 @@ const getCurrentContextCategoryId = () => {
       return parsed
     }
   }
-  // Otherwise return null to use the first category
   return null
 }
 
-// 获取分类的完整路径显示名称
 const getCategoryDisplayName = (category) => {
   if (!category || !categories.value.length) {
     return category?.name || ''
@@ -1190,5 +1165,44 @@ const handleReorderCategory = async ({ id, direction }) => {
   width: 16px;
   height: 16px;
   stroke-width: 2;
+}
+
+.user-profile {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: 0.75rem;
+  padding-left: 0.75rem;
+  border-left: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.avatar-circle {
+  width: 32px;
+  height: 32px;
+  background: var(--primary);
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.user-email {
+  font-size: 0.875rem;
+  font-weight: 500;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Mobile optimization */
+@media (max-width: 768px) {
+  .user-profile {
+    display: none;
+  }
 }
 </style>

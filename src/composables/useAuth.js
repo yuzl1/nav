@@ -5,22 +5,22 @@ import { supabase } from '../utils/supabase'
 // 全局状态
 const user = ref(null)
 const isAuthenticated = computed(() => !!user.value)
-const token = computed(() => user.value?.access_token || '') // 兼容 token 引用
+const token = computed(() => user.value?.access_token || '') // 兼容旧代码
 
 // 存储回调函数
 const authCallbacks = []
 
-// 初始化：检查 Session
+// 1. 初始化：检查 Session
 supabase.auth.getUser().then(({ data }) => {
     user.value = data.user
 })
 
-// 监听 Supabase 状态变化
+// 2. 监听 Supabase 状态变化 (自动处理 Token 刷新/过期)
 supabase.auth.onAuthStateChange((_event, session) => {
     user.value = session?.user || null
 })
 
-// 核心兼容逻辑：当状态变化时，触发所有注册的回调
+// 3. 核心兼容逻辑：当状态变化时，触发所有注册的回调 (适配 App.vue 的逻辑)
 watch(isAuthenticated, (newVal) => {
     authCallbacks.forEach(cb => cb(newVal))
 })
@@ -49,6 +49,27 @@ export function useAuth() {
         }
     }
 
+    // ✅ 新增：注册功能
+    const register = async (email, password) => {
+        try {
+            const { data, error } = await supabase.auth.signUp({
+                email,
+                password,
+            })
+            if (error) throw error
+
+            // 如果 Supabase 开启了邮箱验证但没配 SMTP，这里可能会提示需要验证
+            // 如果关闭了 Confirm email，这里会直接登录成功
+            if (data.user && !data.session) {
+                return { success: true, message: '注册成功！请去邮箱确认验证链接，或直接登录。' }
+            }
+
+            return { success: true, user: data.user }
+        } catch (error) {
+            return { success: false, error: error.message || '注册失败' }
+        }
+    }
+
     // 兼容旧代码：提供 onAuthChange 方法
     const onAuthChange = (callback) => {
         if (typeof callback === 'function') {
@@ -56,14 +77,12 @@ export function useAuth() {
         }
     }
 
-    // 兼容旧代码：提供 apiRequest (虽然现在很少用，但防止报错)
+    // 兼容旧代码：提供 apiRequest
     const apiRequest = async (url, options = {}) => {
-        // 对于 Supabase 架构，这里其实不需要做太多事，
-        // 但为了兼容可能遗漏的 fetch 调用，保留基本透传
         return fetch(url, options)
     }
 
-    // 兼容旧代码：获取 Headers
+    // 兼容旧代码
     const getAuthHeaders = () => ({})
 
     const checkAuth = async () => {
@@ -74,13 +93,14 @@ export function useAuth() {
 
     return {
         user,
-        token, // 兼容
+        token,
         isAuthenticated,
         login,
         logout,
-        onAuthChange, // ✅ 恢复此函数
-        getAuthHeaders, // 兼容
-        apiRequest, // 兼容
+        register,      // 导出注册方法
+        onAuthChange,  // 导出兼容监听方法
+        getAuthHeaders,
+        apiRequest,
         checkAuth
     }
 }
