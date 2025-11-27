@@ -3,8 +3,9 @@ import { ref } from 'vue'
 import { useAuth } from './useAuth'
 import { supabase } from '../utils/supabase'
 
-// 这些状态从 settings 表加载
+// 状态管理
 const aiEnabled = ref(false)
+const aiSource = ref('custom') // 默认给一个值
 const aiApiKey = ref('')
 const aiBaseUrl = ref('https://api.openai.com/v1')
 const aiModel = ref('gpt-4o-mini')
@@ -12,9 +13,10 @@ const aiModel = ref('gpt-4o-mini')
 export function useAI() {
     const { isAuthenticated } = useAuth()
 
-    // 加载 AI 设置
+    // 内部加载函数
     const loadAISettings = async () => {
         if (!isAuthenticated.value) return
+
         const { data } = await supabase.from('settings').select('key, value')
             .in('key', ['aiApiKey', 'aiBaseUrl', 'aiModel'])
 
@@ -24,7 +26,20 @@ export function useAI() {
             aiApiKey.value = map.aiApiKey || ''
             aiBaseUrl.value = map.aiBaseUrl || 'https://api.openai.com/v1'
             aiModel.value = map.aiModel || 'gpt-4o-mini'
+
+            // 更新状态
             aiEnabled.value = !!aiApiKey.value
+        }
+    }
+
+    // ✅ 恢复此函数：兼容 App.vue 的调用
+    const checkAIAvailability = async () => {
+        await loadAISettings()
+        // 返回旧代码期望的格式
+        return {
+            success: true,
+            enabled: aiEnabled.value,
+            source: 'custom'
         }
     }
 
@@ -39,7 +54,18 @@ export function useAI() {
         return { success: !error, error: error?.message }
     }
 
-    // 通用 AI 调用函数 (直接在浏览器发起)
+    const getAISettings = async () => {
+        await loadAISettings()
+        return {
+            success: true,
+            apiKey: aiApiKey.value,
+            baseUrl: aiBaseUrl.value,
+            model: aiModel.value,
+            hasApiKey: !!aiApiKey.value
+        }
+    }
+
+    // AI 调用逻辑
     const callAI = async (messages) => {
         if (!aiApiKey.value) return { success: false, error: '未配置 API Key' }
 
@@ -77,14 +103,18 @@ export function useAI() {
         const cats = JSON.stringify(categories)
         const prompt = `给定分类列表：${cats}。\n请根据网站 "${name}" (${url})，推荐最合适的一个分类ID。只返回分类ID数字，不要其他内容。`
         const res = await callAI([{ role: 'user', content: prompt }])
-        // 解析返回的 ID
-        if (res.success) return { success: true, categoryId: parseInt(res.content.match(/\d+/)[0]) }
-        return res
+        const match = res.content?.match(/\d+/)
+        if (res.success && match) return { success: true, categoryId: parseInt(match[0]) }
+        return { success: false, error: '无法识别分类' }
     }
 
     return {
-        aiEnabled, aiApiKey, aiBaseUrl,
-        loadAISettings, saveAISettings,
-        generateDescription, suggestCategory
+        aiEnabled, aiSource, aiApiKey, aiBaseUrl,
+        checkAIAvailability, // ✅ 导出兼容函数
+        loadAISettings,      // 新函数也导出备用
+        saveAISettings,
+        getAISettings,
+        generateDescription,
+        suggestCategory
     }
 }

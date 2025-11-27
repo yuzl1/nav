@@ -313,9 +313,13 @@ import BackupDialog from './components/BackupDialog.vue'
 import UpdateNotification from './components/UpdateNotification.vue'
 import ToastNotification from './components/ToastNotification.vue'
 import { useAI } from './composables/useAI'
-// 修正 1: 移除 onAuthChange, 确保引入 loadAISettings
-const { isAuthenticated, logout } = useAuth()
-const { aiEnabled, loadAISettings } = useAI() // 修正 2: 替换 checkAIAvailability
+
+// ✅ 这里的解构将能正常工作，因为我们已经在 useAuth.js 兼容版中加回了 onAuthChange
+const { isAuthenticated, logout, onAuthChange } = useAuth()
+
+// ✅ 这里的解构也能正常工作，因为我们已经在 useAI.js 兼容版中加回了 checkAIAvailability
+const { aiEnabled, checkAIAvailability } = useAI()
+
 const { loadSettingsFromDB: loadSearchEnginesSettings } = useSearchEngines()
 const {
   categories,
@@ -606,7 +610,8 @@ onMounted(async () => {
   await loadSearchEnginesSettings()
 
   // 检查AI可用性
-  await loadAISettings() // 修正 2: 替换 checkAIAvailability
+  // ✅ 这里恢复调用 checkAIAvailability，因为它在 useAI.js 兼容版中已经恢复了
+  await checkAIAvailability()
 
   // 如果壁纸已启用，应用壁纸
   if (randomWallpaper.value) {
@@ -625,27 +630,19 @@ onMounted(async () => {
     checkEmptyCategories()
   }
 
-  // 修正 1: 使用 watch 监听认证状态变化
-  watch(isAuthenticated, async (isLoggedIn, wasLoggedIn) => {
-    // 仅在新旧值不同时执行
-    if (isLoggedIn === wasLoggedIn) return;
-
-    // 重新获取数据和设置
+  // 监听登录状态变化，重新获取数据
+  // ✅ 这里恢复调用 onAuthChange，因为它在 useAuth.js 兼容版中已经恢复了
+  onAuthChange(async () => {
     await fetchData()
+    // 登录后重新加载设置（确保获取最新数据）
     await loadSettingsFromDB()
     await loadThemeFromDB()
     await loadSearchEnginesSettings()
-
-    if (isLoggedIn) {
-      // 登录成功时执行
+    // 登录后检查空分类
+    if (isAuthenticated.value) {
       checkEmptyCategories()
     }
-
-    // 移动端优化：登录/退出时关闭侧边栏
-    if (!isDesktop.value) {
-      sidebarOpen.value = false;
-    }
-  });
+  })
 
   // 监听自定义标题变化，更新页面标题
   watch(customTitle, (newTitle) => {
@@ -1074,9 +1071,9 @@ const handleEditFooter = async () => {
 }
 
 const handleAddBookmark = () => {
-  const currentCategoryId = getCurrentContextCategoryId()
-  if (Number.isInteger(currentCategoryId)) {
-    bookmarkDialog.value.open(null, { categoryId: currentCategoryId })
+  const currentContextCategoryId = getCurrentContextCategoryId()
+  if (Number.isInteger(currentContextCategoryId)) {
+    bookmarkDialog.value.open(null, { categoryId: currentContextCategoryId })
   } else {
     bookmarkDialog.value.open()
   }

@@ -1,31 +1,38 @@
 // src/composables/useAuth.js
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { supabase } from '../utils/supabase'
 
-// 使用全局状态，保证多组件共享
+// 全局状态
 const user = ref(null)
 const isAuthenticated = computed(() => !!user.value)
+const token = computed(() => user.value?.access_token || '') // 兼容 token 引用
 
-// 初始化时检查一次 Session
+// 存储回调函数
+const authCallbacks = []
+
+// 初始化：检查 Session
 supabase.auth.getUser().then(({ data }) => {
     user.value = data.user
 })
 
-// 监听 Auth 状态变化（如 Token 过期、其他标签页登出）
+// 监听 Supabase 状态变化
 supabase.auth.onAuthStateChange((_event, session) => {
     user.value = session?.user || null
+})
+
+// 核心兼容逻辑：当状态变化时，触发所有注册的回调
+watch(isAuthenticated, (newVal) => {
+    authCallbacks.forEach(cb => cb(newVal))
 })
 
 export function useAuth() {
 
     const login = async (email, password) => {
         try {
-            // Supabase 使用邮箱登录
             const { data, error } = await supabase.auth.signInWithPassword({
                 email,
                 password
             })
-
             if (error) throw error
             return { success: true, user: data.user }
         } catch (error) {
@@ -35,21 +42,30 @@ export function useAuth() {
 
     const logout = async () => {
         try {
-            const { error } = await supabase.auth.signOut()
-            if (error) throw error
+            await supabase.auth.signOut()
             user.value = null
         } catch (error) {
             console.error('Logout failed:', error)
         }
     }
 
-    // 这个函数主要是为了兼容旧代码结构，Supabase SDK 会自动处理 Header
-    // 但我们在 RLS 策略中需要它
-    const getAuthHeaders = () => {
-        return {} // Supabase SDK 自动处理，不需要手动加 Header
+    // 兼容旧代码：提供 onAuthChange 方法
+    const onAuthChange = (callback) => {
+        if (typeof callback === 'function') {
+            authCallbacks.push(callback)
+        }
     }
 
-    // 这是一个辅助函数，用于需要手动验证登录状态的操作
+    // 兼容旧代码：提供 apiRequest (虽然现在很少用，但防止报错)
+    const apiRequest = async (url, options = {}) => {
+        // 对于 Supabase 架构，这里其实不需要做太多事，
+        // 但为了兼容可能遗漏的 fetch 调用，保留基本透传
+        return fetch(url, options)
+    }
+
+    // 兼容旧代码：获取 Headers
+    const getAuthHeaders = () => ({})
+
     const checkAuth = async () => {
         const { data } = await supabase.auth.getUser()
         user.value = data.user
@@ -58,10 +74,13 @@ export function useAuth() {
 
     return {
         user,
+        token, // 兼容
         isAuthenticated,
         login,
         logout,
-        getAuthHeaders,
+        onAuthChange, // ✅ 恢复此函数
+        getAuthHeaders, // 兼容
+        apiRequest, // 兼容
         checkAuth
     }
 }

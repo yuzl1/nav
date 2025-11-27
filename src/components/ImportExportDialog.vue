@@ -103,7 +103,6 @@ import { ref } from 'vue'
 import { useBookmarks } from '../composables/useBookmarks'
 import { supabase } from '../utils/supabase'
 
-// 我们不再需要 useAuth 的 apiRequest，因为直接用 supabase SDK
 const { categories, bookmarks, fetchData } = useBookmarks()
 
 const show = ref(false)
@@ -146,7 +145,7 @@ const exportJSON = () => {
   importResult.value = { success: true, message: '✅ JSON 文件已导出' }
 }
 
-// 导出为 HTML (保持原逻辑不变)
+// 导出为 HTML
 const exportHTML = () => {
   let html = `<!DOCTYPE NETSCAPE-Bookmark-file-1>
 <META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">
@@ -183,20 +182,22 @@ const exportHTML = () => {
   // 递归生成 HTML
   const generateCategoryHTML = (category, depth) => {
     const indent = '    '.repeat(depth)
-    let output = `${indent}<DT><H3>${escapeHtml(category.name)}</H3>\n`
+    const safeName = (category.name || 'Untitled').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))
+    let output = `${indent}<DT><H3>${safeName}</H3>\n`
     output += `${indent}<DL><p>\n`
 
-    // 生成书签
     const categoryBookmarks = bookmarksByCategory[category.id] || []
     categoryBookmarks.forEach(bookmark => {
       const timestamp = Math.floor(new Date(bookmark.created_at).getTime() / 1000)
-      output += `${indent}    <DT><A HREF="${escapeHtml(bookmark.url)}" ADD_DATE="${timestamp}">${escapeHtml(bookmark.name)}</A>\n`
+      const safeUrl = (bookmark.url || '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))
+      const safeTitle = (bookmark.name || 'Untitled').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))
+      output += `${indent}    <DT><A HREF="${safeUrl}" ADD_DATE="${timestamp}">${safeTitle}</A>\n`
       if (bookmark.description) {
-        output += `${indent}    <DD>${escapeHtml(bookmark.description)}\n`
+        const safeDesc = bookmark.description.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))
+        output += `${indent}    <DD>${safeDesc}\n`
       }
     })
 
-    // 递归生成子分类
     if (category.children && category.children.length > 0) {
       category.children
           .sort((a, b) => a.position - b.position)
@@ -228,16 +229,11 @@ const exportHTML = () => {
   importResult.value = { success: true, message: '✅ HTML 文件已导出' }
 }
 
-const escapeHtml = (text) => {
-  const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }
-  return text.replace(/[&<>"']/g, m => map[m])
-}
-
 const selectFile = () => {
   fileInput.value.click()
 }
 
-// 核心：执行数据库导入
+// 核心：执行数据库导入 (Supabase 逻辑)
 const executeImport = async (categoriesToImport, bookmarksToImport) => {
   const stats = {
     imported: { categories: 0, bookmarks: 0 },
@@ -247,69 +243,80 @@ const executeImport = async (categoriesToImport, bookmarksToImport) => {
 
   const idMap = {} // 旧ID -> 新ID
 
-  // 1. 导入分类 (需要处理父子关系，这里简化处理，优先导入无父级的或按顺序)
-  // 假设 categoriesToImport 已经是按 depth 排序或者平铺的
-  // 我们逐个插入以确保获取新 ID
-
   importStatus.value = `正在导入分类 (共 ${categoriesToImport.length} 个)...`
   let processedCats = 0
 
-  for (const cat of categoriesToImport) {
+  // 按深度排序，确保父分类先创建
+  const sortedCats = [...categoriesToImport].sort((a, b) => (a.depth || 0) - (b.depth || 0))
+
+  for (const cat of sortedCats) {
     processedCats++
-    importProgress.value = 20 + Math.floor((processedCats / categoriesToImport.length) * 30) // 20% -> 50%
+    importProgress.value = 20 + Math.floor((processedCats / categoriesToImport.length) * 30)
 
     try {
-      // 检查新父ID (如果存在 parent_id，必须映射到新的 ID)
       let newParentId = null
       if (cat.parent_id && idMap[cat.parent_id]) {
         newParentId = idMap[cat.parent_id]
       }
 
-      // 插入 Supabase
-      const { data: newCat, error } = await supabase
+      // 检查是否存在同名分类（避免重复）
+      const { data: existing } = await supabase
           .from('categories')
-          .insert([{
-            name: cat.name,
-            position: cat.position || 0,
-            is_private: !!cat.is_private,
-            parent_id: newParentId
-          }])
-          .select()
-          .single()
+          .select('id')
+          .eq('name', cat.name)
+          .eq('parent_id', newParentId || null) // 使用 "is" 语法处理 null，但在 supabase js client 中 .eq 也能处理 null
+          // 注意：如果 parent_id 是 null，Supabase 的 eq('parent_id', null) 可能无法匹配 SQL 的 IS NULL
+          // 最好使用 filter('parent_id', 'is', null) 或者依赖 .maybeSingle 返回空
+          .maybeSingle()
 
-      if (error) {
-        // 假设重复或其他错误，视为跳过
-        stats.skipped.categories++
-        // 尝试查找已存在的分类以获取 ID (为了后续挂载书签)
-        // 注意：这里简化逻辑，只按名字匹配
-        const { data: existing } = await supabase
+      // 特殊处理 parent_id 为 null 的查询情况
+      let existingId = null
+      if (!newParentId) {
+        const { data: rootExisting } = await supabase
             .from('categories')
             .select('id')
             .eq('name', cat.name)
+            .is('parent_id', null)
             .maybeSingle()
+        if (rootExisting) existingId = rootExisting.id
+      } else if (existing) {
+        existingId = existing.id
+      }
 
-        if (existing) {
-          idMap[cat.id] = existing.id
+      if (existingId) {
+        idMap[cat.id] = existingId
+        stats.skipped.categories++
+      } else {
+        const { data: newCat, error } = await supabase
+            .from('categories')
+            .insert([{
+              name: cat.name,
+              position: cat.position || 0,
+              is_private: !!cat.is_private,
+              parent_id: newParentId
+            }])
+            .select()
+            .single()
+
+        if (!error && newCat) {
+          stats.imported.categories++
+          idMap[cat.id] = newCat.id
+        } else {
+          console.error('Category insert failed:', error)
         }
-      } else if (newCat) {
-        stats.imported.categories++
-        idMap[cat.id] = newCat.id
       }
     } catch (e) {
       console.error('Import category error', e)
     }
   }
 
-  // 2. 导入书签
+  // 导入书签
   importStatus.value = `正在导入书签 (共 ${bookmarksToImport.length} 个)...`
-  let processedBooks = 0
   const bookmarksPayload = []
 
   for (const bm of bookmarksToImport) {
-    processedBooks++
     const newCategoryId = idMap[bm.category_id]
 
-    // 如果找不到对应的分类ID，则跳过该书签，或放入默认分类
     if (newCategoryId) {
       bookmarksPayload.push({
         name: bm.name,
@@ -321,23 +328,25 @@ const executeImport = async (categoriesToImport, bookmarksToImport) => {
         position: bm.position || 0
       })
     } else {
+      // 找不到分类，放入"导入的书签"（如果存在）或者跳过
       stats.skipped.bookmarks++
-      stats.details.skippedItems.push({ type: 'bookmark', name: bm.name, reason: '父分类导入失败' })
     }
   }
 
-  // 批量插入书签以提高性能
   if (bookmarksPayload.length > 0) {
-    // Supabase 建议批量插入不要过大，这里假设数量适中
-    // 实际生产可能需要分块 (chunk)
-    const { error } = await supabase.from('bookmarks').insert(bookmarksPayload)
-    if (error) {
-      console.error('Batch insert error', error)
-      // 如果批量失败，统计会不准，这里简单处理
-      stats.skipped.bookmarks += bookmarksPayload.length
-      stats.details.skippedItems.push({ type: 'batch', name: '批量书签', reason: error.message })
-    } else {
-      stats.imported.bookmarks += bookmarksPayload.length
+    // 分批插入，避免一次性包太大
+    const BATCH_SIZE = 50
+    for (let i = 0; i < bookmarksPayload.length; i += BATCH_SIZE) {
+      const chunk = bookmarksPayload.slice(i, i + BATCH_SIZE)
+      const { error } = await supabase.from('bookmarks').insert(chunk)
+      if (!error) {
+        stats.imported.bookmarks += chunk.length
+      } else {
+        console.error('Batch insert error', error)
+        stats.skipped.bookmarks += chunk.length
+        stats.details.skippedItems.push({ type: 'batch', name: '批量书签', reason: error.message })
+      }
+      importProgress.value = 50 + Math.floor(((i + chunk.length) / bookmarksPayload.length) * 50)
     }
   }
 
@@ -384,7 +393,6 @@ const importJSON = async (text) => {
 
   importProgress.value = 100
   importStatus.value = '导入完成'
-
   const msg = `✅ 导入成功！\n\n新增：${stats.imported.categories} 个分类，${stats.imported.bookmarks} 个书签`
   importResult.value = { success: true, message: msg }
 
@@ -397,114 +405,180 @@ const importHTML = async (text) => {
   const parser = new DOMParser()
   const doc = parser.parseFromString(text, 'text/html')
 
-  const categories = []
-  const bookmarks = []
-  const categoryPositionMap = {}
+  let categories = []
+  let bookmarks = []
+  let catCounter = 0
+  let bookmarkCounter = 0
+
+  // 辅助结构
   const processedDLs = new WeakSet()
 
   const findNextDL = (element) => {
     if (!element) return null
     if (element.tagName === 'DL') return element
     let sibling = element.nextElementSibling
-    while (sibling && sibling.tagName !== 'DL') {
+    while (sibling) {
+      if (sibling.tagName === 'DL') return sibling
+      // 如果遇到新的 DT，说明当前 DT 没有子 DL
+      if (sibling.tagName === 'DT') return null
       sibling = sibling.nextElementSibling
     }
-    return sibling && sibling.tagName === 'DL' ? sibling : null
+    return null
   }
 
   const findDirectChild = (element, tagName) => {
     return Array.from(element.children).find(child => child.tagName === tagName)
   }
 
+  // 策略 A: 尝试递归解析目录结构
   const parseBookmarkNode = (node, currentCategoryId = null, currentParentId = null, depth = 0) => {
-    if (depth > 5) return
+    if (depth > 10) return // 防止死循环
     const children = Array.from(node.children)
 
-    for (let i = 0; i < children.length; i++) {
-      const child = children[i]
-      if (child.tagName === 'H3') {
-        const categoryName = child.textContent.trim()
-        const normalizedName = categoryName.toLowerCase()
-        const isRootContainer = depth === 0 && (normalizedName === 'bookmarks' || normalizedName === '书签')
+    for (const child of children) {
+      // 1. 识别分类 (H3)
+      if (child.tagName === 'H3' || (child.tagName === 'DT' && child.querySelector('h3'))) {
+        const h3 = child.tagName === 'H3' ? child : child.querySelector('h3')
+        const categoryName = h3.textContent.trim()
 
-        if (!categoryName || isRootContainer) {
-          const dlElement = findNextDL(child)
+        // 获取容器 DL
+        let dlElement = null
+        if (child.tagName === 'DT') {
+          dlElement = findDirectChild(child, 'DL') || findNextDL(h3)
+        } else {
+          dlElement = findNextDL(child)
+        }
+
+        // 跳过无名分类或部分根标识 (可选：根据需要跳过 bookmarks/书签栏 等根节点)
+        if (!categoryName) {
           if (dlElement) {
             processedDLs.add(dlElement)
-            parseBookmarkNode(dlElement, isRootContainer ? null : currentCategoryId, isRootContainer ? null : currentParentId, depth)
+            parseBookmarkNode(dlElement, currentCategoryId, currentParentId, depth)
           }
           continue
         }
 
-        // 使用临时 ID
-        const categoryId = categories.length + 1
-        const parentKey = currentParentId || 'root'
-        if (!categoryPositionMap[parentKey]) categoryPositionMap[parentKey] = 0
-
+        const currentId = ++catCounter
+        // 记录分类
         categories.push({
-          id: categoryId,
+          id: currentId,
           name: categoryName,
-          position: categoryPositionMap[parentKey]++,
           parent_id: currentParentId,
           depth: depth,
+          position: catCounter,
           is_private: false
         })
 
-        const dlElement = findNextDL(child)
+        // 递归处理子内容
         if (dlElement) {
           processedDLs.add(dlElement)
-          parseBookmarkNode(dlElement, categoryId, categoryId, depth + 1)
+          parseBookmarkNode(dlElement, currentId, currentId, depth + 1)
         }
-      } else if (child.tagName === 'DT') {
-        const directChildren = Array.from(child.children)
-        let linkElement = directChildren.find(el => el.tagName === 'A')
-        if (!linkElement) {
-          const fallbackLink = child.querySelector('A')
-          if (fallbackLink && fallbackLink.closest('DT') === child) linkElement = fallbackLink
-        }
+      }
+      // 2. 识别书签 (A)
+      else if (child.tagName === 'A' || (child.tagName === 'DT' && child.querySelector('a'))) {
+        const a = child.tagName === 'A' ? child : child.querySelector('a')
+        const url = a.getAttribute('href')
+        const name = a.textContent.trim() || url
 
-        if (linkElement) {
-          const url = linkElement.getAttribute('HREF') || linkElement.getAttribute('href')
-          const name = linkElement.textContent.trim()
-          if (url && name && (url.startsWith('http') || url.startsWith('https'))) {
-            let targetCategoryId = currentCategoryId
-            // 如果没有分类，放入默认分类
-            if (!targetCategoryId) {
-              // 简化：这里只标记需要放到默认分类，executeImport 时处理或提前建好
-              // 为了简单，这里不处理根目录书签，或者你需要手动 push 一个默认分类
-            }
-
-            if (targetCategoryId) {
-              bookmarks.push({
-                name: name,
-                url: url,
-                description: '',
-                category_id: targetCategoryId,
-                is_private: false,
-                position: bookmarks.length
-              })
-            }
-          }
-        } else {
-          // 处理 DT 下直接包 DL 的情况 (少见但存在)
-          const dlElement = findDirectChild(child, 'DL')
-          if (dlElement) parseBookmarkNode(dlElement, currentCategoryId, currentParentId, depth)
+        if (url && (url.startsWith('http') || url.startsWith('https'))) {
+          bookmarks.push({
+            id: ++bookmarkCounter,
+            name: name,
+            url: url,
+            description: '',
+            icon: a.getAttribute('icon') || '',
+            category_id: currentCategoryId, // 可能为 null
+            position: bookmarkCounter,
+            is_private: false
+          })
         }
-      } else if (child.tagName === 'DL') {
-        if (!processedDLs.has(child)) parseBookmarkNode(child, currentCategoryId, currentParentId, depth)
+      }
+      // 3. 处理容器 (DL) - 有些格式直接嵌套 DL
+      else if (child.tagName === 'DL') {
+        if (!processedDLs.has(child)) {
+          parseBookmarkNode(child, currentCategoryId, currentParentId, depth)
+        }
       }
     }
   }
 
+  // 执行策略 A
   parseBookmarkNode(doc.body, null, null, 0)
 
-  if (categories.length === 0 && bookmarks.length === 0) throw new Error('未找到有效数据')
+  // === 策略 B: 兜底方案 (Fallback) ===
+  // 如果策略 A 没找到任何书签，说明结构解析失败，改用暴力查找所有 <a> 标签
+  if (bookmarks.length === 0) {
+    console.warn('结构化解析未找到书签，切换到扁平扫描模式...')
+    const allLinks = doc.querySelectorAll('a')
 
+    if (allLinks.length > 0) {
+      // 创建一个默认分类来存放所有书签
+      const fallbackCatId = ++catCounter
+      categories.push({
+        id: fallbackCatId,
+        name: '导入的书签 (自动扫描)',
+        parent_id: null,
+        depth: 0,
+        position: 0,
+        is_private: false
+      })
+
+      allLinks.forEach((a, index) => {
+        const url = a.getAttribute('href')
+        const name = a.textContent.trim() || url
+
+        if (url && (url.startsWith('http') || url.startsWith('https'))) {
+          bookmarks.push({
+            id: ++bookmarkCounter,
+            name: name,
+            url: url,
+            category_id: fallbackCatId, // 全部放入兜底分类
+            position: index,
+            is_private: false,
+            icon: a.getAttribute('icon') || '',
+            description: ''
+          })
+        }
+      })
+    }
+  }
+
+  // 后处理：检查是否有没分配分类的孤儿书签 (策略 A 遗留的根目录书签)
+  const orphanBookmarks = bookmarks.filter(b => !b.category_id)
+  if (orphanBookmarks.length > 0) {
+    // 查找或创建"其他书签"分类
+    let otherCatId = categories.find(c => c.name === '其他书签' && !c.parent_id)?.id
+
+    if (!otherCatId) {
+      otherCatId = ++catCounter
+      categories.push({
+        id: otherCatId,
+        name: '其他书签',
+        parent_id: null,
+        depth: 0,
+        position: 9999,
+        is_private: false
+      })
+    }
+
+    orphanBookmarks.forEach(b => b.category_id = otherCatId)
+  }
+
+  console.log(`解析结果: ${categories.length} 个分类, ${bookmarks.length} 个书签`)
+
+  if (categories.length === 0 && bookmarks.length === 0) {
+    throw new Error('文件解析失败：未找到任何有效的书签链接。\n请确认上传的是浏览器导出的 HTML 书签文件。')
+  }
+
+  // 执行导入
+  importStatus.value = `解析完成，准备上传 ${bookmarks.length} 个书签...`
   const stats = await executeImport(categories, bookmarks)
 
   importProgress.value = 100
   importStatus.value = '导入完成'
-  const msg = `✅ 导入成功！\n\n解析：${categories.length} 个分类，${bookmarks.length} 个书签`
+
+  const msg = `✅ 导入成功！\n\n新增：${stats.imported.categories} 个分类，${stats.imported.bookmarks} 个书签`
   importResult.value = { success: true, message: msg }
 
   setTimeout(async () => {
@@ -516,6 +590,7 @@ defineExpose({ open, close })
 </script>
 
 <style scoped>
+/* 样式保持不变 */
 .import-export-dialog { max-width: 500px; }
 .dialog-overlay { z-index: 4000 !important; }
 .export-section, .import-section { margin-bottom: 1.5rem; }
