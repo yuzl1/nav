@@ -5,7 +5,7 @@
 本项目是基于 [deerwan/nav](https://github.com/deerwan/nav) 项目进行二次开发和架构迁移的衍生作品。
 
 * **原始项目许可证**：Apache License 2.0。
-* **核心架构变更**：将原有的 Cloudflare Pages Functions + D1 架构完全替换为 **Supabase (PostgreSQL) + 纯前端** BaaS 架构，以适应国内和通用的 Docker 部署环境。
+* **核心架构变更**：使用 ai 将原有的 Cloudflare Pages Functions + D1 架构完全替换为 **Supabase (PostgreSQL) + 纯前端** BaaS 架构，以适应国内和通用的 Docker 部署环境。
 
 我们保留了原项目的版权和许可证信息，并在此感谢原作者的贡献。
 
@@ -90,7 +90,7 @@
   <tr>
     <td align="center">
       <strong>微信</strong><br>
-      <img src="images/zsm.jpeg" alt="微信" width="200">
+      <img src="images/zsm.JPG" alt="微信" width="200">
     </td>
     <td align="center">
       <strong>支付宝</strong><br>
@@ -103,7 +103,7 @@
   </tr>
 </table>
 
-☕ [查看咖啡列表](https://lllh.de/sponsor/) - 感谢所有支持者！
+## [试用地址](https://www.yu1998.com)
 
 ## 📝 许可证
 
